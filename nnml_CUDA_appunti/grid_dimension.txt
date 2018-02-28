@@ -1,0 +1,23 @@
+A disposizione del DEVICE di Stefano (cc 3.5):
+
+-1 SM (1 Multiprocessore)
+
+-Fino a 1024 threads per blocco
+
+-Fino a 16 blocchi per ogni SM 
+
+-Fino a 2048 threads per ogni SM
+
+---In base a questi dati possiamo fare le seguenti considerazioni:---
+
+
+1) Se ogni blocco fosse 8x8 (64 threads per blocco), per utilizzare tutti i threads a disposizione della SM dovremmo impostare una griglia con 32 blocchi ma
+   poiché una SM può contenere al più 16 blocchi avremmo solo 1024 threads per SM.
+
+2) Se ogni blocco fosse 16x16 (256 threads per blocco), per utilizzare tutti i threads a disposizione della SM dovremmo impostare una griglia con 8 blocchi e
+   poiché una SM può contenere al più 16 blocchi riusciamo, in questo caso, a sfruttare tutti i suoi 2048 threads.
+
+3) Se ogni blocco fosse 32x32 (1024 threads per blocco), per utilizzare tutti i threads a disposizione della SM dovremmo impostare una griglia con 2 blocchi 
+   e satureremmo tutti i threads a disposizione della SM (2048) ma con soli 2 blocchi.
+
+Sulla base di questa analisi, sembra più appropriata la scelta 2).
