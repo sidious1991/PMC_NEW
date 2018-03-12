@@ -16,7 +16,6 @@
 #define NUMBANKS 32
 #define LOGNUMBANKS 5 //NumBanks = 32
 #define CONFLICT_FREE_OFFSET(n) ((n)>>(LOGNUMBANKS))
-//#define CONFLICT_FREE_OFFSET(n) ((n) >> NUMBANKS + (n) >> (2 * LOGNUMBANKS))
 
 //Kernel (per block)
 __global__ void scan(int *d_data_input, int *d_data_output, int n_block){
@@ -71,27 +70,13 @@ __global__ void scan(int *d_data_input, int *d_data_output, int n_block){
 
 void ssb_prefix_sum(int *d_data_input, int *d_data_output, int n_elements) {
 	
-	//One entry for each block. Used to store the total sum of each block
-	int *block_sums;
-	//Total sum of d_data (one element only)
-	int *total_sum;
-	
-	int blockSize = DEFAULTBLOCKSIZE;
 	int elemperblock = ELEMPERBLOCK;
 	int num_padding_shared = (elemperblock/NUMBANKS)-1;
 	
 	//How many blocks in the grid (1024 block threads for 2048 elements of d_data_input)
-	int gridDim = ((n_elements+elemperblock-1)/elemperblock);
-	//One element only
-	MY_CUDA_CHECK(cudaMalloc((void **)&total_sum, 1));
-	
-	//Not more than 1024 blocks of 1024 threads in a grid
-	MY_CUDA_CHECK(cudaMalloc((void **)&block_sums, blockSize));
+	int gridDim = ((n_elements+elemperblock-1)/elemperblock);	
 	
 	scan<<<gridDim, DEFAULTBLOCKSIZE, (elemperblock+num_padding_shared)*sizeof(int)>>>(d_data_input, d_data_output, elemperblock);
-	
-	MY_CUDA_CHECK(cudaFree(block_sums));
-	MY_CUDA_CHECK(cudaFree(total_sum));
 }
 
 

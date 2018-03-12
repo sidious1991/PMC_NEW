@@ -19,7 +19,7 @@ __inline__ __device__ int warp_id(void){return threadIdx.x/warpSize;}
 __inline__ __device__ int warpPrefixSum(int val, int lane_id){
 	
 	int val_shuffled;
-	//Da verificare perché ha questo comportamento !!!
+	
 	for(int offset = 1; offset < warpSize; offset *=2){	
 		
 		val_shuffled = __shfl_up(val, offset);
@@ -46,8 +46,7 @@ __inline__ __device__ int blockPrefixSum(int val){
 	
 	__syncthreads();
 	
-	//Attenzione a non riutilizzare val! Usare una nuova variabile di registro (increment) altrimenti 
-	//Avremmo perdita di informazione!
+	
 	increment = (threadIdx.x < blockDim.x/warpSize)?(shared[lane]):(0); 
 	
 	if(wid == 0){
@@ -75,7 +74,7 @@ __global__ void PrefixSum(int *d_data, int *sums){
 	
 	d_data[index] = val;
 	
-	if(threadIdx.x == (blockDim.x - 1)){
+	if(sums != NULL && threadIdx.x == (blockDim.x - 1)){
 		sums[blockIdx.x] = val;
 	}
 }
@@ -91,29 +90,16 @@ __global__ void ApplyIncrement(int *d_data, int *block_sums_scanned){
 	}
 }
 
-void ssb_prefix_sum(int *d_data, int n_elements) {
+void ssb_prefix_sum(int *d_data, int n_elements, int *block_sums) {
 	
-
 	int blockSize = DEFAULTBLOCKSIZE;
-	//One entry for each block. Used to store the total sum of each block
-	int *block_sums;
-	//Total sum of d_data (one element only)
-	int *total_sum;
+	
 	//How many blocks in the grid
 	int gridDim = ((n_elements+blockSize-1)/blockSize);
 	
-	//Not more than 1024 blocks of 1024 threads in a grid
-	MY_CUDA_CHECK(cudaMalloc((void **)&block_sums, blockSize));
-	//One element only
-	MY_CUDA_CHECK(cudaMalloc((void **)&total_sum, 1));
-	
-	
 	PrefixSum<<<gridDim, blockSize>>>(d_data, block_sums);
-	PrefixSum<<<1,blockSize>>>(block_sums, total_sum);
+	PrefixSum<<<1,blockSize>>>(block_sums, NULL);
 	ApplyIncrement<<<gridDim, blockSize>>>(d_data, block_sums);
-	
-	MY_CUDA_CHECK(cudaFree(block_sums));
-	MY_CUDA_CHECK(cudaFree(total_sum));
 }
 
 
@@ -131,7 +117,7 @@ bool CPUverify(int *h_data, int *h_result, int n_elements)
 
     for (int i=0 ; i<n_elements; i++)
     {
-    	printf("device : %d, host : %d \n",h_result[i], h_data[i]);
+    	//printf("device : %d, host : %d \n",h_result[i], h_data[i]);
         diff += h_data[i]-h_result[i];
     }
 
@@ -146,6 +132,8 @@ bool CPUverify(int *h_data, int *h_result, int n_elements)
 int main(int argc, char **argv) {
     int *h_data, *h_result;
     int *d_data;
+    int *block_sums;
+    
     int blockSize = DEFAULTBLOCKSIZE;
     int n_elements=65536;
     int n_aligned;
@@ -186,11 +174,12 @@ int main(int argc, char **argv) {
     float et = 0;
     float inc = 0;
 
+    MY_CUDA_CHECK(cudaMalloc((void **)&block_sums, blockSize*sizeof(int)));
     MY_CUDA_CHECK(cudaMalloc((void **)&d_data, sz));
     MY_CUDA_CHECK(cudaMemcpy(d_data, h_data, sz, cudaMemcpyHostToDevice));
     MY_CUDA_CHECK(cudaEventRecord(start, 0));
     
-    ssb_prefix_sum(d_data,n_elements);
+    ssb_prefix_sum(d_data,n_elements,block_sums);
     
     MY_CUDA_CHECK(cudaEventRecord(stop, 0));
     MY_CUDA_CHECK(cudaEventSynchronize(stop));
@@ -206,6 +195,7 @@ int main(int argc, char **argv) {
 
     MY_CUDA_CHECK(cudaFreeHost(h_data));
     MY_CUDA_CHECK(cudaFreeHost(h_result));
+    MY_CUDA_CHECK(cudaFree(block_sums));
     MY_CUDA_CHECK(cudaFree(d_data));
     MY_CUDA_CHECK(cudaEventDestroy(start));
     MY_CUDA_CHECK(cudaEventDestroy(stop));
